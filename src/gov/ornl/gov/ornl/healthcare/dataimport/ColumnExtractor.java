@@ -11,7 +11,10 @@ import java.util.logging.Logger;
 
 import com.mongodb.DB;
 import com.mongodb.MongoClient;
-
+/*
+ * Simple utility to connect from postgres to Mongo
+ * 
+ */
 public class ColumnExtractor
 {
   //default connection properties
