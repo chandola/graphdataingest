@@ -1,14 +1,16 @@
 package gov.ornl.healthcare.dataimport;
 
+import gov.ornl.healthcare.Configuration;
+
 import java.net.UnknownHostException;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Connection;
+import java.util.StringTokenizer;
 import java.util.Vector;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
@@ -33,8 +35,6 @@ public class ColumnExtractor
 	MongoClient mongo_client = null;
 	DB mongo_db = null;
 
-	private final static Logger log = Logger.getLogger(ColumnExtractor.class.getName());
-
 	public void pg_initDB()
 	{
 		try
@@ -43,7 +43,7 @@ public class ColumnExtractor
 		}
 		catch(SQLException e)
 		{
-			log.log(Level.SEVERE,e.getMessage(),e);
+			Configuration.getLogger().log(Level.SEVERE,e.getMessage(),e);
 		}
 	}
 
@@ -60,7 +60,7 @@ public class ColumnExtractor
 		}
 		catch(SQLException e)
 		{
-			log.log(Level.WARNING, e.getMessage(), e);
+			Configuration.getLogger().log(Level.WARNING, e.getMessage(), e);
 		}
 	}
 
@@ -71,7 +71,7 @@ public class ColumnExtractor
 			mongo_client = new MongoClient();
 		} catch (UnknownHostException e)
 		{
-			log.log(Level.SEVERE, e.getMessage(),e);
+			Configuration.getLogger().log(Level.SEVERE, e.getMessage(),e);
 			return;
 		}
 		mongo_db = mongo_client.getDB( "healthcare" );		
@@ -83,24 +83,22 @@ public class ColumnExtractor
 			mongo_client.close();
 	}
 
-	public void extractColumn(Vector<String> fieldNames)
+	public void extractColumn(ExtractionRule rule)
 	{
 		try
 		{
 			//extract column from Postgres
-			ExtractionRule rule = new ExtractionRule(ExtractionRule.TYPE.COMPOUND);
-			rule.setFieldNames(fieldNames);
 			pg_st = pg_con.createStatement();
 			pg_rs = pg_st.executeQuery("SELECT DISTINCT("+rule.getQuery()+") FROM "+pg_table);
 		}
 		catch(SQLException e)
 		{
-			log.log(Level.WARNING, e.getMessage(),e);
+			Configuration.getLogger().log(Level.WARNING, e.getMessage(),e);
 		}		
 
 	}
 
-	public void migrateColumn(String collectionName)
+	public void migrateColumn(String collectionName, char mode)
 	{
 		if(pg_rs != null)
 		{
@@ -108,38 +106,70 @@ public class ColumnExtractor
 			{
 				//choose the Mongo Collection to add to
 				DBCollection collection = mongo_db.getCollection(collectionName);
+				if(mode == 'w')
+					collection.remove(new BasicDBObject());
+				
+				long cnt = collection.count()+1;
 				while(pg_rs.next())
 				{
-					BasicDBObject obj = new BasicDBObject("text", pg_rs.getString(1));
+					BasicDBObject obj = new BasicDBObject("_id",cnt).append("text", pg_rs.getString(1));
 					collection.insert(obj);
+					cnt++;
 				}
 
 			}
 			catch(SQLException e)
-			{
-				log.log(Level.WARNING, e.getMessage(),e);
+			{	
+				Configuration.getLogger().log(Level.WARNING, e.getMessage(),e);
 			}
 		}
 	}
 
 	public static void main(String [] args)
 	{
-		log.setLevel(Level.INFO);
 		long start,end;
+		
+		// process arguments
+		if(args.length < 4)
+		{
+			System.err.println("Incorrect Arguments");
+			System.err.println("Usage:\n");
+			System.err.println("java ColumnExtractor mongocolumnname mode numfields fieldstring\n");
+			System.exit(0);
+		}
+		String columnName = args[0];
+		char mode = args[1].charAt(0);
+		int numFields = Integer.parseInt(args[2]);
+		String fieldString = args[3];
+		Vector<String> fieldNames = new Vector<String>(numFields);
+		StringTokenizer tokenizer = new StringTokenizer(fieldString,",");
+		while(tokenizer.hasMoreTokens())
+			fieldNames.add(tokenizer.nextToken());
+		
 		ColumnExtractor extractor = new ColumnExtractor();
 		extractor.pg_initDB();
 		extractor.mongo_initDB();
-		Vector<String> fieldNames = new Vector<String>(2);
-		fieldNames.add("provider_first_name");
-		fieldNames.add("provider_last_name");
+		ExtractionRule rule;
+		if(numFields == 1)
+		{
+			rule = new ExtractionRule(ExtractionRule.TYPE.SINGLE);
+			rule.append(fieldNames.firstElement());
+		}
+		else
+		{
+			rule = new ExtractionRule(ExtractionRule.TYPE.COMPOUND);
+			rule.setFieldNames(fieldNames);
+		}
+		Configuration.getLogger().log(Level.INFO,"Column extraction started.");
 		start = System.currentTimeMillis();
-		extractor.extractColumn(fieldNames);
+		extractor.extractColumn(rule);
 		end = System.currentTimeMillis();
-		log.log(Level.INFO,"Column extracted in "+(end - start)+" milliseconds.");
+		Configuration.getLogger().log(Level.INFO,"Column extracted in "+(end - start)+" milliseconds.");
+		Configuration.getLogger().log(Level.INFO,"Column migration started.");
 		start = System.currentTimeMillis();
-		extractor.migrateColumn("provider_names");
+		extractor.migrateColumn(columnName,mode);
 		end = System.currentTimeMillis();
-		log.log(Level.INFO,"Column migrated in "+(end - start)+" milliseconds.");
+		Configuration.getLogger().log(Level.INFO,"Column migrated in "+(end - start)+" milliseconds.");
 		extractor.pg_closeDB();
 		extractor.mongo_closeDB();
 	}

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--set any default configuration parameters here-->
+<Configuration version="1">
+  <Property name="dbURL" value="jdbc:postgresql://localhost/healthcare"/>
+  <Property name="dbUser" value="postgres"/>
+  <Property name="dbPassword" value="postgres"/>
+  <Property name="mongoURL" value="localhost"/>
+  <Property name="mongoInsertMode" value="w"/>
+  <Property name="mongoPort" value="27017"/>
+  <Property name="mongoDatabase" value="healthcare"/>
+  <Property name="mongoCollectionName" value="providers"/>
+  <Property name="mongoCollectionSource" value="nppes"/>
+  <Property name="mongoCollectionFields" value="npi,employer_identification_number,name,business_mailing_address,business_mailing_address_telephone_number,healthcare_provider_taxonomy_code,license_number"/>
+  <Property name="dbQuery" value="SELECT
+					npi,
+					employer_identification_number,
+					concat(trim(provider_first_name),' ',btrim(provider_middle_name||' '),' ',trim(provider_last_name)) as name,
+					concat(trim(replace(provider_first_line_business_mailing_address,',',' ')),',', trim(replace(provider_second_line_business_mailing_address,',',' ')),',', trim(replace(provider_business_mailing_address_city_name,',',' ')), ',',trim(replace(provider_business_mailing_address_state_name,',',' ')),',',trim(replace(provider_business_mailing_address_postal_code,',',' '))) as business_mailing_address,
+					provider_business_mailing_address_telephone_number as business_mailing_address_telephone_number,
+					healthcare_provider_taxonomy_code_1 as healthcare_provider_taxonomy_code, 
+					provider_license_number_1 as license_number 
+				FROM nppes"/>
+</Configuration>

@@ -47,7 +47,7 @@ public class ExtractionRule
 		{
 			buf.append("trim(");
 			buf.append(fieldNames.get(i));
-			buf.append(")||' '||");
+			buf.append(")||\' \'||");
 		}
 		buf.append("trim(");
 		buf.append(fieldNames.get(fieldNames.size() - 1));
