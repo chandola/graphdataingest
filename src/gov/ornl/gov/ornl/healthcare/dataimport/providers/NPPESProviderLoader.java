@@ -10,9 +10,8 @@ public class NPPESProviderLoader
 	public static void main(String args[])
 	{
 		String configurationURL = args[0];
-		Configuration.getLogger().setLevel(Level.FINE);
+		Configuration.getLogger().setLevel(Level.FINEST);
 		Configuration.addConfigDocument(configurationURL);
-		CollectionLoader.run();		
+		CollectionLoader.run();
 	}
-
 }

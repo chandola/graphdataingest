@@ -6,12 +6,13 @@ package gov.ornl.healthcare.dataimport.dbutils;
 import gov.ornl.healthcare.Configuration;
 
 import java.net.UnknownHostException;
-import java.util.HashMap;
 import java.util.logging.Level;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
+import com.mongodb.DBCursor;
+import com.mongodb.MapReduceCommand;
 import com.mongodb.MongoClient;
 
 /**
@@ -25,13 +26,11 @@ public class MongoUtils
 	private String database;
 	private MongoClient client = null;
 	private DB db = null;
-	private HashMap<String,DBCollection> collectionMap;
-	
+	private DBCollection collection;
 
 	public MongoUtils(String database)
 	{
 		this.database = database;
-		this.collectionMap = new HashMap<String,DBCollection>();
 	}
 	
 	public MongoUtils(String url, int port, String database)
@@ -54,25 +53,21 @@ public class MongoUtils
 		db = client.getDB(database);		
 	}
 
-	public void addCollection(String collectionName)
+	public void setCollection(String collectionName)
 	{
-		if(!collectionMap.containsKey(collectionName))
-		{
-			DBCollection collection = this.db.getCollection(collectionName);
-			collectionMap.put(collectionName, collection);
-		}
+		collection = this.db.getCollection(collectionName);
 	}
 	
-	public void clearCollection(String collectionName)
+	public void clearCollection()
 	{
-		if(collectionMap.containsKey(collectionName))
-			collectionMap.get(collectionName).remove(new BasicDBObject());
+		if(collection != null)
+			collection.remove(new BasicDBObject());
 	}
 	
 	public long getCollectionCount(String collectionName)
 	{
-		if(collectionMap.containsKey(collectionName))
-			return collectionMap.get(collectionName).count();
+		if(collection != null)
+			return collection.count();
 		else
 			return 0;
 	}
@@ -83,11 +78,48 @@ public class MongoUtils
 			client.close();
 	}
 
-	public void addToCollection(String collectionName,BasicDBObject dbObject)
+	public void addToCollection(BasicDBObject dbObject)
 	{
-		if(collectionMap.containsKey(collectionName))
+		if(collection != null)
+			collection.insert(dbObject);
+	}
+	
+	public void createFieldCollection(String field,String collectionName)
+	{
+		if(collection != null)
 		{
-			collectionMap.get(collectionName).insert(dbObject);
+			String m  = "function() { key = this."+field+";"+
+	                   "emit( key, null );}";
+			String r = "function(key, values) {return values[0];}";
+			MapReduceCommand cmd = new MapReduceCommand(collection,m,r,collectionName,MapReduceCommand.OutputType.MERGE,null);
+			collection.mapReduce(cmd);
 		}
+	}
+	
+	public boolean hasCollection(String field)
+	{
+		return db.collectionExists(field);
+	}
+
+	public void mergeCollections(String first, String second)
+	{
+		if(db.collectionExists(first) && db.collectionExists(second))
+		{
+			DBCollection firstCollection = db.getCollection(first);
+			DBCollection secondCollection = db.getCollection(second);			
+			DBCursor l = secondCollection.find();
+			while(l.hasNext())
+			{
+				BasicDBObject lObj = (BasicDBObject) l.next();
+				BasicDBObject fObj = new BasicDBObject(first+"_text",lObj.get(first+"_text"));
+				if(firstCollection.find(fObj) == null)
+					firstCollection.insert(fObj);
+			}
+		}
+	}
+
+	public void dropCollection(String collectionName)
+	{
+		db.getCollection(collectionName).drop();
 	}
 }
